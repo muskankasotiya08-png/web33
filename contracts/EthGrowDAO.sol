@@ -1,14 +1,4 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-/**
- * @title EthGrow DAO
- * @dev A decentralized autonomous organization for community-driven decision making
- * @notice This contract implements governance, proposal management, and treasury operations
- */
-contract EthGrowDAO {
-    
-    // Structs
+Structs
     struct Proposal {
         uint256 id;
         address proposer;
@@ -35,58 +25,16 @@ contract EthGrowDAO {
         uint256 votesParticipated;
     }
     
-    // State variables
-    address public founder;
-    string public daoName;
-    uint256 public memberCount;
-    uint256 public proposalCount;
-    uint256 public treasuryBalance;
-    uint256 public minimumQuorum;
-    uint256 public votingPeriod;
-    uint256 public proposalThreshold;
-    bool private locked;
-    
-    // Constants
+    Constants
     uint256 public constant MEMBERSHIP_FEE = 0.1 ether;
     uint256 public constant BASE_VOTING_POWER = 1;
     uint256 public constant REPUTATION_MULTIPLIER = 10;
     
-    // Mappings
-    mapping(address => Member) public members;
-    mapping(uint256 => Proposal) public proposals;
-    mapping(address => bool) public isBlacklisted;
-    
-    // Arrays
+    Arrays
     address[] public memberAddresses;
     uint256[] public activeProposalIds;
     
-    // Events
-    event MemberJoined(address indexed member, uint256 timestamp);
-    event MemberLeft(address indexed member, uint256 timestamp);
-    event ProposalCreated(
-        uint256 indexed proposalId,
-        address indexed proposer,
-        string title,
-        uint256 amount,
-        uint256 endTime
-    );
-    event VoteCast(
-        uint256 indexed proposalId,
-        address indexed voter,
-        bool support,
-        uint256 weight
-    );
-    event ProposalExecuted(
-        uint256 indexed proposalId,
-        bool success,
-        uint256 amount
-    );
-    event FundsDeposited(address indexed from, uint256 amount);
-    event QuorumUpdated(uint256 oldQuorum, uint256 newQuorum);
-    event MemberBlacklisted(address indexed member);
-    event ReputationAwarded(address indexed member, uint256 amount);
-    
-    // Modifiers
+    Modifiers
     modifier onlyFounder() {
         require(msg.sender == founder, "EthGrow: Caller is not the founder");
         _;
@@ -117,143 +65,11 @@ contract EthGrowDAO {
     constructor(string memory _daoName) {
         founder = msg.sender;
         daoName = _daoName;
-        minimumQuorum = 51; // 51% quorum requirement
-        votingPeriod = 7 days;
-        proposalThreshold = 0.01 ether;
-        
-        // Founder automatically becomes first member
+        minimumQuorum = 51; Founder automatically becomes first member
         members[founder] = Member({
             isActive: true,
             joinedAt: block.timestamp,
-            votingPower: BASE_VOTING_POWER * 10, // Founder gets 10x voting power
-            reputation: 100,
-            proposalsCreated: 0,
-            votesParticipated: 0
-        });
-        
-        memberAddresses.push(founder);
-        memberCount = 1;
-    }
-    
-    /**
-     * @dev Allows users to join the DAO by paying membership fee
-     */
-    function joinDAO() external payable noReentrant {
-        require(!members[msg.sender].isActive, "EthGrow: Already a member");
-        require(!isBlacklisted[msg.sender], "EthGrow: Address is blacklisted");
-        require(msg.value >= MEMBERSHIP_FEE, "EthGrow: Insufficient membership fee");
-        
-        members[msg.sender] = Member({
-            isActive: true,
-            joinedAt: block.timestamp,
-            votingPower: BASE_VOTING_POWER,
-            reputation: 10,
-            proposalsCreated: 0,
-            votesParticipated: 0
-        });
-        
-        memberAddresses.push(msg.sender);
-        memberCount++;
-        treasuryBalance += msg.value;
-        
-        emit MemberJoined(msg.sender, block.timestamp);
-    }
-    
-    /**
-     * @dev Allows members to leave the DAO
-     */
-    function leaveDAO() external onlyMember noReentrant {
-        members[msg.sender].isActive = false;
-        memberCount--;
-        
-        emit MemberLeft(msg.sender, block.timestamp);
-    }
-    
-    /**
-     * @dev Creates a new proposal for the DAO to vote on
-     * @param title The title of the proposal
-     * @param description Detailed description of the proposal
-     * @param amount The amount of ETH requested (if applicable)
-     * @param recipient The address to receive funds (if applicable)
-     */
-    function createProposal(
-        string memory title,
-        string memory description,
-        uint256 amount,
-        address payable recipient
-    ) external onlyMember returns (uint256) {
-        require(bytes(title).length > 0, "EthGrow: Title cannot be empty");
-        require(bytes(description).length > 0, "EthGrow: Description cannot be empty");
-        require(amount <= address(this).balance, "EthGrow: Insufficient treasury funds");
-        
-        if (amount > proposalThreshold) {
-            require(
-                members[msg.sender].reputation >= 50,
-                "EthGrow: Insufficient reputation for large proposals"
-            );
-        }
-        
-        proposalCount++;
-        uint256 proposalId = proposalCount;
-        
-        Proposal storage newProposal = proposals[proposalId];
-        newProposal.id = proposalId;
-        newProposal.proposer = msg.sender;
-        newProposal.title = title;
-        newProposal.description = description;
-        newProposal.amount = amount;
-        newProposal.recipient = recipient;
-        newProposal.votesFor = 0;
-        newProposal.votesAgainst = 0;
-        newProposal.startTime = block.timestamp;
-        newProposal.endTime = block.timestamp + votingPeriod;
-        newProposal.executed = false;
-        newProposal.exists = true;
-        
-        activeProposalIds.push(proposalId);
-        members[msg.sender].proposalsCreated++;
-        
-        emit ProposalCreated(
-            proposalId,
-            msg.sender,
-            title,
-            amount,
-            newProposal.endTime
-        );
-        
-        return proposalId;
-    }
-    
-    /**
-     * @dev Allows members to vote on a proposal
-     * @param proposalId The ID of the proposal to vote on
-     * @param support True for yes, false for no
-     */
-    function vote(uint256 proposalId, bool support) 
-        external 
-        onlyMember 
-        proposalExists(proposalId) 
-    {
-        Proposal storage proposal = proposals[proposalId];
-        
-        require(block.timestamp < proposal.endTime, "EthGrow: Voting period ended");
-        require(!proposal.executed, "EthGrow: Proposal already executed");
-        require(!proposal.hasVoted[msg.sender], "EthGrow: Already voted");
-        
-        Member storage member = members[msg.sender];
-        uint256 voteWeight = member.votingPower + (member.reputation / REPUTATION_MULTIPLIER);
-        
-        proposal.hasVoted[msg.sender] = true;
-        proposal.voteWeight[msg.sender] = voteWeight;
-        
-        if (support) {
-            proposal.votesFor += voteWeight;
-        } else {
-            proposal.votesAgainst += voteWeight;
-        }
-        
-        member.votesParticipated++;
-        member.reputation += 1; // Award reputation for voting
+            votingPower: BASE_VOTING_POWER * 10, Award reputation for voting
         
         emit VoteCast(proposalId, msg.sender, support, voteWeight);
     }
@@ -481,3 +297,6 @@ contract EthGrowDAO {
         emit FundsDeposited(msg.sender, msg.value);
     }
 }
+// 
+Contract End
+// 
